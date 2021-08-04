@@ -12,7 +12,7 @@ MAL_OUT_BASE = r'E:\Source\pdf\mal'
 BEN_OUT_BASE = r'E:\Source\pdf\ben'
 
 
-def parse_pdf(file):
+def parse_pdf(file_path):
     ret = {
         'meta': {'file_size': 0},
         'header': {},
@@ -20,15 +20,13 @@ def parse_pdf(file):
         'xref': {},
         'trailer': {}
     }
-
-    if isinstance(file, io.BufferedReader):
-        buffer = file.read()
-    elif isinstance(file, bytes):
-        buffer = file
-    elif os.path.isfile(file):
-        file_name = file.split(os.sep)[-1].rsplit(os.extsep, maxsplit=1)[0]
-        with open(file, 'rb') as f:
+    if os.path.isfile(file_path):
+        file_name = file_path.split(os.sep)[-1].rsplit(os.extsep, maxsplit=1)[0]
+        with open(file_path, 'rb') as f:
             buffer = f.read()
+    else:
+        print("Invalid File or Filename")
+        return
     ret['meta']['file_size'] = len(buffer)
     buffer = buffer.replace("endobj".encode(), "endobj\r\n".encode())
     buffer = buffer.replace("\t".encode(), " ".encode())

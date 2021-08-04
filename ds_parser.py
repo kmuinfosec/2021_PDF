@@ -1203,7 +1203,7 @@ def YARACompile(ruledata):
 def AddDecoder(cClass):
     global decoders
 
-    decoders.append(cClass)
+    decoders.add_files(cClass)
 
 class cDecoderParent():
     pass
