@@ -244,7 +244,7 @@ class PDFInformation:
     # object stream dump
 
     # object stream decode
-    
+
 
 PATH = r"E:\PDF\mal\0902293f19286270122eacba8bf74c49.vir" # Replace the file path
 f = open(PATH, "rb")
@@ -252,6 +252,12 @@ data = f.read()
 f.close()
 
 pdfi = PDFInformation(data)
-a = pdfi.parse_trailer_dictionary(data)
 
-print(a)
+pdfi.print_element(data)
+for element in pdfi.parse_cross_reference_table(data):
+    print("object {0} : {1}, {2}, {3}".format(element[0], element[1], element[2], element[3]))
+
+for element in pdfi.parse_trailer_dictionary(data):
+    print("{0} : {1}".format(element[0], element[1]))
+
+print(pdfi)
