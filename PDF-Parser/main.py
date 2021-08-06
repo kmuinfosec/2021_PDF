@@ -199,50 +199,59 @@ class PDFInformation:
 
         return result
 
-    def parse_trailer(self, file_data):
+    def parse_trailer_dictionary(self, file_data):
         """
-
-        :param file_data:
-        :return:
+        Parse PDF trailer dictionary key and value (recommend to use the rstrip function for each element.)
+        :param file_data: byte sequence read from PDF file
+        :return: tuple list, [(Key String, Value String), ...]
         """
+        result = []
         for (start_offset, end_offset) in self.trailer:
-            dictionary_start_offset = file_data.find(b"<<", start_offset, end_offset)
-            dictionary_end_offset = file_data.find(b">>", start_offset, end_offset)
+            dictionary_start_offset = file_data.find(b'<<', start_offset, end_offset)
+            dictionary_end_offset = file_data.find(b'>>', start_offset, end_offset)
 
-            offset = dictionary_start_offset
-            dictionary_key_start_offsets = []
-            while dictionary_end_offset > offset:
-                offset = file_data.find(b'/', offset + 1)
-                if offset == -1:
-                    break
-                dictionary_key_start_offsets.append(offset)
+            if dictionary_start_offset == -1 or dictionary_end_offset == -1:
+                self.status_information.add("Trailer dictionary not found")
+                break
 
-            dictionary_key_end_offsets = []
-            for offset in dictionary_key_start_offsets:
-                dictionary_key_end_offsets.append(file_data.find(b' ', offset))
+            key_start_offsets = []
+            key_end_offsets = []
 
-            dictionary_value_start_offsets = []
-            dictionary_value_end_offsets = []
+            p = re.compile(b"\/")
+            mit = p.finditer(file_data, dictionary_start_offset, dictionary_end_offset)
+            for match_object in mit:
+                key_start_offsets.append(match_object.start())
 
-            for offset in dictionary_key_end_offsets:
-                dictionary_value_start_offsets.append(offset + 1)
+            for start_offset in key_start_offsets:
+                key_end_offsets.append(file_data.find(b' ', start_offset))
 
-            for offset in dictionary_value_start_offsets:
-                temp = file_data.find(b'/', offset, dictionary_end_offset)
-                if temp == -1:
-                    dictionary_value_end_offsets.append(dictionary_end_offset)
-                else:
-                    dictionary_value_end_offsets.append(temp - 1)
+            value_start_offsets = []
+            value_end_offsets = []
 
-            for i, j, k, l in zip(dictionary_key_start_offsets, dictionary_key_end_offsets, dictionary_value_start_offsets, dictionary_value_end_offsets):
-                print("{0} : {1}".format(file_data[i:j], file_data[k:l]))
+            for end_offset in key_end_offsets:
+                value_start_offsets.append(end_offset + 1)
 
+            for i in range(len(key_start_offsets) - 1):
+                value_end_offsets.append(key_start_offsets[i + 1])
 
-PATH = r"E:\PDF\mal\0902293f19286270122eacba8bf74c49.vir"
+            value_end_offsets.append(dictionary_end_offset)
+
+            for key_start_offset, key_end_offset, value_start_offset, value_end_offset in zip(key_start_offsets, key_end_offsets, value_start_offsets, value_end_offsets):
+                result.append((file_data[key_start_offset: key_end_offset], file_data[value_start_offset: value_end_offset]))
+
+        return result
+
+    # object stream dump
+
+    # object stream decode
+    
+
+PATH = r"E:\PDF\mal\0902293f19286270122eacba8bf74c49.vir" # Replace the file path
 f = open(PATH, "rb")
 data = f.read()
 f.close()
 
 pdfi = PDFInformation(data)
+a = pdfi.parse_trailer_dictionary(data)
 
-pdfi.parse_trailer(data)
+print(a)
