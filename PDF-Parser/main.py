@@ -241,9 +241,51 @@ class PDFInformation:
 
         return result
 
+    def get_object_stream_offset(self, file_data, object_start_offset, object_end_offset):
+        """
+        Get object start offset and end offset
+        :param file_data: byte sequence read from PDF file
+        :param object_start_offset: Starting offset of object
+        :param object_end_offset: End offset of object
+        :return: tuple, (stream start offset, stream end offset)
+        """
+
+        p = re.compile(b"stream", re.IGNORECASE)
+        m = p.match(file_data,object_start_offset, object_end_offset)
+        stream_start_offset = m.end()
+
+        p = re.compile(b"endstream", re.IGNORECASE)
+        m = p.match(file_data, object_start_offset, object_end_offset)
+        stream_end_offset = m.start()
+
+        return (stream_start_offset, stream_end_offset)
+
+
     # object stream dump
 
-    # object stream decode
+    def dump_object_stream(self, file_data, stream_offset, filter_name, file_name, hash_name = ""):
+        """
+        Dump the stream to a file.
+        :param file_data: byte sequence read from PDF file
+        :param stream_offset: tuple, (stream start offset, stream end offset)
+        :param filter_name:
+        :param file_name: path to save the file
+        :param hash_name: string, use the file hash value as the file name (If the input exists)
+        :return:
+        """
+
+        if hash_name == "":
+            pass
+        elif hash_name == "MD5":
+            pass
+        elif hash_name == "SHA-1":
+            pass
+        elif hash_name == "SHA-256":
+            pass
+        else:
+            self.error_information.add("")
+
+
 
 
 PATH = r"E:\PDF\mal\0902293f19286270122eacba8bf74c49.vir" # Replace the file path
@@ -253,11 +295,11 @@ f.close()
 
 pdfi = PDFInformation(data)
 
-pdfi.print_element(data)
-for element in pdfi.parse_cross_reference_table(data):
-    print("object {0} : {1}, {2}, {3}".format(element[0], element[1], element[2], element[3]))
+#pdfi.print_element(data)
+f3or element in pdfi.parse_cross_reference_table(data):
+#    print("object {0} : {1}, {2}, {3}".format(element[0], element[1], element[2], element[3]))
 
-for element in pdfi.parse_trailer_dictionary(data):
-    print("{0} : {1}".format(element[0], element[1]))
+#for element in pdfi.parse_trailer_dictionary(data):
+#    print("{0} : {1}".format(element[0], element[1]))
 
-print(pdfi)
+#print(pdfi)
