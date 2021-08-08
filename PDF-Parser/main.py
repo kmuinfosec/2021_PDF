@@ -1,6 +1,9 @@
 import hashlib
 import os
 import re
+import zlib
+import base64
+import binascii
 
 class PDFInformation:
     def __init__(self, file_data):
@@ -243,60 +246,97 @@ class PDFInformation:
 
     def get_object_stream_offset(self, file_data, object_start_offset, object_end_offset):
         """
-        Get object start offset and end offset
+        Get object start offset and end offset, if fail return None
         :param file_data: byte sequence read from PDF file
         :param object_start_offset: Starting offset of object
         :param object_end_offset: End offset of object
         :return: tuple, (stream start offset, stream end offset)
         """
 
-        p = re.compile(b"stream", re.IGNORECASE)
-        m = p.match(file_data,object_start_offset, object_end_offset)
-        stream_start_offset = m.end()
+        stream_start_offset = file_data.find(b"stream", object_start_offset, object_end_offset)
+        stream_end_offset = file_data.find(b"endstream", object_start_offset, object_end_offset)
 
-        p = re.compile(b"endstream", re.IGNORECASE)
-        m = p.match(file_data, object_start_offset, object_end_offset)
-        stream_end_offset = m.start()
-
-        return (stream_start_offset, stream_end_offset)
-
+        if stream_start_offset == -1 or stream_end_offset == -1:
+            self.error_information("PDF offset parse, stream keywords not found")
+            return None
+        return (stream_start_offset + 6, stream_end_offset)
 
     # object stream dump
 
-    def dump_object_stream(self, file_data, stream_offset, filter_name, file_name, hash_name = ""):
+    def dump_object_stream(self, file_data, stream_offset, path, file_name, filter_name="", hash_name=""):
         """
-        Dump the stream to a file.
+        Dump stream to file
         :param file_data: byte sequence read from PDF file
         :param stream_offset: tuple, (stream start offset, stream end offset)
-        :param filter_name:
-        :param file_name: path to save the file
-        :param hash_name: string, use the file hash value as the file name (If the input exists)
-        :return:
+        :param filter_name: name of filter to use when decoding encoded objects
+        :param path: path to save the file
+        :param file_name: name to save the file
+        :param hash_name: (optional), name of the function to replace file name
+        :return: if function succeed return 0, not return None
         """
 
-        if hash_name == "":
-            pass
-        elif hash_name == "MD5":
-            pass
-        elif hash_name == "SHA-1":
-            pass
-        elif hash_name == "SHA-256":
-            pass
+        stream_data = file_data[stream_offset[0]:stream_offset[1]]
+        stream_data = stream_data.lstrip()
+        stream_data = stream_data.rstrip()
+
+        # get file handle(calc hash name or use file name)
+        file_hash_name = ""
+        f = None
+        if hash_name != "":
+            if hash_name == "MD5":
+                file_hash_name = hashlib.md5(stream_data).hexdigest()
+            elif hash_name == "SHA-1":
+                file_hash_name = hashlib.sha1(stream_data).hexdigest()
+            elif hash_name == "SHA-256":
+                file_hash_name = hashlib.sha256(stream_data).hexdigest()
+            else:
+                self.error_information.add("Stream dump, invalid hash function name")
+
+            f = open(os.path.join(path, file_hash_name), "wb")
         else:
-            self.error_information.add("")
+            f = open(os.path.join(path, file_name), "wb")
+
+        if filter_name == "":
+            f.write(stream_data)
+            f.close()
+            return 0
+        else:
+            if filter_name == "FlateDecode":
+                f.write(zlib.decompress(stream_data))
+                f.close()
+                return 0
+            elif filter_name == "ASCIIHexDecode":
+                stream_data = stream_data.replace(b' ')
+                temp = str(stream_data, 'ascii')
+                f.write(binascii.unhexlify(temp))
+                f.close()
+                return 0
+            elif filter_name == "ASCII85Decode":
+                f.write(base64.b85decode(stream_data))
+                f.close()
+                return 0
+            else:
+                f.close()
+                self.error_information.add("Stream dump, invalid filter name")
+                return None
 
 
-
-
-PATH = r"E:\PDF\mal\0902293f19286270122eacba8bf74c49.vir" # Replace the file path
+PATH = r"C:\Users\User\Downloads\12.vir" # Replace the file path
 f = open(PATH, "rb")
 data = f.read()
 f.close()
 
 pdfi = PDFInformation(data)
+pdfi.dump_object_stream(data, pdfi.get_object_stream_offset(data, 869, 1430), r"D:\lab", "test1.str")
+pdfi.dump_object_stream(data, pdfi.get_object_stream_offset(data, 869, 1430), r"D:\lab", "test2.str", "FlateDecode")
+pdfi.dump_object_stream(data, pdfi.get_object_stream_offset(data, 869, 1430), r"D:\lab", "test3.str", "FlateDecode", "MD5")
+pdfi.dump_object_stream(data, pdfi.get_object_stream_offset(data, 869, 1430), r"D:\lab", "test4.str", "FlateDecode", "SHA-1")
+pdfi.dump_object_stream(data, pdfi.get_object_stream_offset(data, 869, 1430), r"D:\lab", "test5.str", "FlateDecode", "SHA-256")
+print(pdfi)
+
 
 #pdfi.print_element(data)
-f3or element in pdfi.parse_cross_reference_table(data):
+#for element in pdfi.parse_cross_reference_table(data):
 #    print("object {0} : {1}, {2}, {3}".format(element[0], element[1], element[2], element[3]))
 
 #for element in pdfi.parse_trailer_dictionary(data):
