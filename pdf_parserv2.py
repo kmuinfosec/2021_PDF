@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 RAW_PATH = r'D:\Source\pdf\Benign_PDF'
 PARSE_PATH = r''
-MP = False
+MP = True
 
 
 def parse_pdf(file_path):
@@ -24,7 +24,7 @@ def parse_pdf(file_path):
 
         ret['body'] = dict()
         objs = re.findall(rb'\d+\s\d\sobj+[\s\S]*?endobj', data, re.IGNORECASE | re.MULTILINE)
-        for i in objs[:2]:
+        for i in objs:
             obj_id, obj_version = re.split(rb"\s", re.search(rb'(\d+\s\d+)\s*?obj', i).group(1))
             for obj_dict in re.findall(rb'<<[\s\S]*>>', i, re.IGNORECASE | re.MULTILINE):
                 ret['body'][obj_id] = dict()
@@ -33,7 +33,8 @@ def parse_pdf(file_path):
                 for tag, value in tags_with_value:
                     if tag + value not in ret['body'][obj_id]['tags']:
                         ret['body'][obj_id]['tags'].add((tag, value))
-                        ret['body'][obj_id]['tags'].remove(tag)
+                        if tag in ret['body'][obj_id]['tags']:
+                            ret['body'][obj_id]['tags'].remove(tag)
             streams = re.findall(rb'stream(\s*?[\s\S]*?\s*?)endstream', i, re.IGNORECASE | re.MULTILINE)
             if streams:
                 ret['body'][obj_id]['stream'] = []
@@ -57,10 +58,37 @@ def parse_pdf(file_path):
             ret['trailer'][idx] = set(re.findall(rb'/\w+', trailer))
             tags_with_value = re.findall(rb"(/\w+)([^/]+)", trailer, re.IGNORECASE | re.MULTILINE)
             for tag, value in tags_with_value:
-                if tag + value not in ret['body'][obj_id]['tags']:
+                if tag + value not in ret['trailer'][idx]:
                     ret['trailer'][idx].add((tag, value))
-                    ret['trailer'][idx].remove(tag)
+                    if tag in ret['trailer'][idx]:
+                        ret['trailer'][idx].remove(tag)
         return ret
+
+
+def pretty_print(parse_result: dict):
+    print("PDF")
+    for key in parse_result:
+        if key == '└version':
+            print(f"version -> {parse_result[key]}")
+        elif key == 'body':
+            print(f"└body")
+            for ref_num in parse_result[key]:
+                for i in parse_result[key][ref_num]:
+                    if i == 'tags':
+                        print('\t└' + i)
+                        for tag in parse_result[key][ref_num][i]:
+                            print(f"\t\t└{tag}")
+        elif key == 'xref':
+            print(f"└xref")
+            for ref_num in parse_result[key]:
+                print(f"\t└{ref_num}")
+                for i in parse_result[key][ref_num]:
+                    print('\t\t└', i)
+        elif key == 'trailer':
+            print(f"└trailer")
+            for ref_num in parse_result[key]:
+                for i in parse_result[key][ref_num]:
+                    print(f"\t\t└{i}")
 
 
 def main():
@@ -82,30 +110,6 @@ def main():
     else:
         for path in tqdm(paths):
             result = parse_pdf(path)
-            print("PDF")
-            for key in result:
-                if key == '└version':
-                    print(f"version -> {result[key]}")
-                elif key == 'body':
-                    print(f"└body")
-                    for ref_num in result[key]:
-                        for i in result[key][ref_num]:
-                            if i == 'tags':
-                                print('\t└' + i)
-                                for tag in result[key][ref_num][i]:
-                                    print(f"\t\t└{tag}")
-                elif key == 'xref':
-                    print(f"└xref")
-                    for ref_num in result[key]:
-                        print(f"\t└{ref_num}")
-                        for i in result[key][ref_num]:
-                            print('\t\t└', i)
-                elif key == 'trailer':
-                    print(f"└trailer")
-                    for ref_num in result[key]:
-                        for i in result[key][ref_num]:
-                            print(f"\t\t└{i}")
-            break
 
 
 if __name__ == '__main__':
