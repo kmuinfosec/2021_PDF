@@ -1,9 +1,7 @@
 # TODO
 
-1. 정상, 악성 파일 비율 맞춰서 비교
-2. URL 배제
-3. Exploit --> OBJ Length, OBJ Entropy, (관련 논문)
-4. Data Augmentation 방법 모색
+1. Recall 높힐 방법
+2. 피쳐 추출기에 충실하자 (어디가 왜 의심스러운지 판별 가능)
 
 
 # Papers

@@ -225,3 +225,9 @@ gen
 .ipynb_checkpoints/
 *.dat
 *.csv
+
+# User Define
+*.png
+*.jpg
+*.jpeg
+*.gif
