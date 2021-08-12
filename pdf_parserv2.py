@@ -1,22 +1,24 @@
 import pickle
-import re
 import multiprocessing as mp
 import os
+import re
+
 from tqdm import tqdm
 
-RAW_PATH = r'D:\Source\pdf_fortrans\pdf2021'
-PARSE_PATH = r'E:\Source\pdf\mal_parse'
+RAW_PATH = r'C:\Users\FURO\Desktop\Scores'
+PARSE_PATH = r'./'
 MP = False
 SAVE = False
 
 
 def parse_pdf(file_path):
+    print('-' * 25 + file_path + '-' * 25)
     file_name = file_path.split(os.sep)[-1]
     if os.extsep in file_name:
         file_hash = file_name.rsplit(os.extsep, maxsplit=1)[0]
     else:
         file_hash = file_name
-    assert len(file_hash) == len('03c7c0ace395d80182db07ae2c30f034')
+    # assert len(file_hash) == len('03c7c0ace395d80182db07ae2c30f034')
 
     ret = dict()
     with open(file_path, 'rb') as f:
@@ -34,51 +36,34 @@ def parse_pdf(file_path):
 
     # Parse Body
     ret['body'] = dict()
-    objs = re.findall(rb'\d+\s\d\sobj[\s\S]*?endobj', data, re.IGNORECASE | re.MULTILINE)
-    for obj_string in objs:
-        obj_meta = re.search(rb'(\d+\s\d+)\s*?obj', obj_string, re.IGNORECASE | re.MULTILINE).group(1)
-        obj_id, obj_version = map(bytes.decode, re.split(rb"\s", obj_meta))
-        ret['body'][obj_id] = dict()
-        ret['body'][obj_id]['tags'] = set()
-        for obj_dict in re.findall(rb'<<([\s\S]*)>>', obj_string, re.IGNORECASE | re.MULTILINE):
-            obj_dict = obj_dict
-            temp = re.split(rb'\s', obj_dict)
-            tag = None
-            parentheses = [b'[', b']', b'(', b')', b'<<', b'>>']
-            idx = 0
-            while idx < len(temp):
-                if len(temp[idx]) != 0:
-                    if idx < len(temp) and temp[idx][0] == '/':
-                        tag = temp[idx]
-                        if idx < len(temp) - 1 and temp[idx + 1][0] in parentheses:
-                            idx += 1
-                            value = []
-                            while idx < len(temp) and temp[idx][-1] not in parentheses:
-                                value.append(temp[idx])
-                                idx += 1
-                            else:
-                                value.append(temp[idx])
-                            print(tag, " ".join(value))
-                        elif idx < len(temp) - 1 and temp[idx + 1][0] != '/':
-                            idx += 1
-                            value = []
-                            while idx < len(temp) and temp[idx][0] != '/':
-                                value.append(temp[idx])
-                                idx += 1
-                            print(tag, " ".join(value))
-                        else:
-                            print(tag)
-                            idx += 1
-                    else:
-                        idx += 1
-                else:
-                    idx += 1
-
+    objs = re.findall(rb'(\d+[\s\r]\d+[\s\r]?)obj([\s\S]*?)endobj', data, re.IGNORECASE | re.MULTILINE)
+    for obj_meta, obj_string in objs:
+        obj_id, obj_version = map(bytes.decode, re.split(rb'\s', obj_meta, maxsplit=1, flags=re.IGNORECASE))
+        ret['body'][obj_id] = {
+            'version': -1,
+            'tags': set(),
+            'reference': [],
+            'stream': []
+        }
+        stack = 1
+        start_idx = obj_string.find(b"<<") + len(b"<<")
+        end_idx = len(obj_string) - 1
+        for i in range(start_idx, end_idx + 1):
+            if obj_string[i:i + 2] == b'<<':
+                stack += 1
+            elif obj_string[i:i + 2] == b'>>':
+                stack -= 1
+            if stack == 0:
+                end_idx = i
+                break
+        obj_dict = obj_string[start_idx:end_idx]
+        obj_tags = set(map(bytes.decode, re.findall(rb'/\w+', obj_dict)))
+        ret['body'][obj_id]['tags'] = obj_tags
+        obj_refer = list(map(bytes.decode, re.findall(rb'\d+\s+\d+\sR', obj_dict)))
+        ret['body'][obj_id]['reference'] = obj_refer
         streams = re.findall(rb'stream(\s*?[\s\S]*?\s*?)endstream', obj_string, re.IGNORECASE | re.MULTILINE)
-        if streams:
-            ret['body'][obj_id]['stream'] = []
-            for stream in streams:
-                ret['body'][obj_id]['stream'].append(stream)
+        if len(streams) == 1:
+            ret['body'][obj_id]['stream'].append(streams[0])
 
     # Parse Cross Reference Table
     xref_tables = re.findall(rb'xref\s+[\s\S]*?trailer', data, re.IGNORECASE | re.MULTILINE)
@@ -89,9 +74,7 @@ def parse_pdf(file_path):
             if ref_meta:
                 ref_num = re.search(rb'xref[\s\S]*?(\d)+\s(\d+)', table).group(2)
                 ref_table = re.findall(rb'\d+\s\d+\s\S', table)
-                ret['xref'][ref_num] = []
-                for obj_string in ref_table:
-                    ret['xref'][ref_num].append(obj_string)
+                ret['xref'][ref_num] = list(map(bytes.decode, ref_table))
 
     # Parse Trailer
     ret['trailer'] = dict()
@@ -103,7 +86,7 @@ def parse_pdf(file_path):
         tags_with_value = re.findall(rb"(/\w+)([^/]+)", trailer, re.IGNORECASE | re.MULTILINE)
         for tag, value in tags_with_value:
             if tag + value not in ret['trailer'][idx]:
-                ret['trailer'][idx].add((tag, value))
+                ret['trailer'][idx].add((tag.decode(), value.decode().rstrip()))
                 if tag in ret['trailer'][idx]:
                     ret['trailer'][idx].remove(tag)
 
@@ -123,7 +106,7 @@ def pretty_print(parse_result: dict):
             for ref_num in parse_result[key]:
                 for i in parse_result[key][ref_num]:
                     if i == 'tags':
-                        print('\t└' + i)
+                        print('\t└' + f"obj {ref_num} {i}")
                         for tag in parse_result[key][ref_num][i]:
                             print(f"\t\t└{tag}")
         elif key == 'xref':
@@ -149,7 +132,6 @@ def main():
                 name, ext = file, 'file',
             if ext == 'file' or ext == 'pdf' or ext == 'vir':
                 paths.append(path + os.sep + file)
-    # paths = [r'D:\Source\pdf_fortrans\pdf2021\04c9f9f06af6f06e11cd5017098d822b.vir']
     if MP:
         with mp.Pool(processes=os.cpu_count() // 2) as pool:
             total = len(paths)
@@ -158,7 +140,7 @@ def main():
                 continue
     else:
         for path in tqdm(paths):
-            parse_pdf(path)
+            pretty_print(parse_pdf(path))
 
 
 if __name__ == '__main__':
