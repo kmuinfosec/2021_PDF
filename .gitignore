@@ -231,3 +231,4 @@ gen
 *.jpg
 *.jpeg
 *.gif
+*.pickle

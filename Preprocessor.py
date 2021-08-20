@@ -1,58 +1,32 @@
-import math
 import multiprocessing as mp
 import os
 import pickle
 import sys
-from collections import Counter
 
 import numpy as np
 from tqdm import tqdm
 
-'''
-Stream Length Distribution
-악성 파일의 스트림의 길이가 좀 더 길 거라 예상
-Stream Length, File Size Ratio
-파일 크기에 비해 스트림의 길이가 길 거라 예상
-Object Stream Standard Deviation
-한 오브젝트에 공격 코드를 삽입하기 때문에 오브젝트 스트림 길이의 분산이 클 것이라 예상
-Stream Entropy Distribution
-난독화된 공격코드의 경우 엔트로피가 상대적으로 높을 것이라 예상
-
-'''
-BEN_PARSE_PATH = r'E:\Source\pdf\ben'
-MAL_PARSE_PATH = r'E:\Source\pdf\mal'
-BEN_FEATURE_PATH = r'E:\Source\pdf\ben_feature'
-MAL_FEATURE_PATH = r'E:\Source\pdf\mal_feature'
+from Utils import get_entropy, get_file_name_ext
 
 
-def get_entropy(data):
-    if not data:
-        return 0.0
-    occurrences = Counter(bytearray(data))
-    entropy = 0
-    for x in occurrences.values():
-        p_x = float(x) / len(data)
-        entropy -= p_x * math.log(p_x, 2)
-    return entropy
+def star(args):
+    preprocess(*args)
 
 
-def do(file_path):
-    file_name = file_path.split(os.sep)[-1].rsplit(os.extsep)[0] + os.extsep + 'pickle'
+def preprocess(file_path, out_path):
     with open(file_path, 'rb') as f:
         stream_lengths = []
         entropies = []
         tags = set()
         data = pickle.load(f)
-        file_size = data['meta']['file_size']
+        file_size = data['file_size']
         for i in data['body']:
-            if isinstance(i, int):
-                if 'stream' in data['body'][i]:
-                    for tag in data['body'][i]['tags']:
-                        tags.add(tag)
-                    if data['body'][i]['actual_length'] > 0:
-                        stream = data['body'][i]['stream']
-                        entropies.append(get_entropy(stream))
-                        stream_lengths.append(data['body'][i]['actual_length'])
+            for tag in data['body'][i]['tags']:
+                tags.add(tag)
+            if 'stream' in data['body'][i]:
+                stream = data['body'][i]['stream'][0]
+                entropies.append(get_entropy(stream))
+                stream_lengths.append(len(stream))
 
     length_sum = sum(stream_lengths)
     feature_vector = [
@@ -73,27 +47,27 @@ def do(file_path):
         # Object Tag Cardinality
         len(tags) if len(tags) > 0 else -1
     ]
-    with open(MAL_FEATURE_PATH + os.sep + file_name, 'wb') as f:
+    with open(out_path, 'wb') as f:
         pickle.dump(feature_vector, f)
 
 
-def main(args):
-    if len(args) == 1:
-        base_path = input("Please input file path : ")
-    else:
-        base_path = args[2]
-    base_path = MAL_PARSE_PATH
+def main(args: list):
+    mp.freeze_support()
+    _, parse_dir, output_dir = args
 
-    file_list = []
-    for path, dirs, files in os.walk(base_path):
+    pickle_path = []
+    output_path = []
+    for path, dirs, files in os.walk(parse_dir):
         for file in files:
-            name, ext = file.split(os.extsep, maxsplit=1)
+            name, ext = get_file_name_ext(path + os.sep + file)
             if ext == 'pickle':
-                file_list.append(path + os.sep + file)
-
+                pickle_path.append(path + os.sep + file)
+                output_path.append(output_dir + os.sep + name + os.extsep + 'pickle')
     with mp.Pool(processes=os.cpu_count() // 2) as pool:
-        for _ in tqdm(pool.imap_unordered(do, file_list), total=len(file_list)):
+        for _ in tqdm(pool.imap_unordered(star, zip(pickle_path, output_path), chunksize=2048), total=len(pickle_path)):
             pass
+        pool.close()
+        pool.join()
 
 
 if __name__ == '__main__':

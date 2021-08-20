@@ -6,7 +6,7 @@ import pickle
 from tqdm import tqdm
 
 BEN_PATH = r'D:\Source\pdf\Benign_PDF'
-MAL_PATH = r'D:\Source\pdf\Malicious_PDF'
+MAL_PATH = r'D:\Source\pdf_fortrans\mal_jiran'
 
 MAL_OUT_BASE = r'E:\Source\pdf\mal'
 BEN_OUT_BASE = r'E:\Source\pdf\ben'
@@ -80,13 +80,13 @@ def parse_pdf(file_path):
                 ret['body']['inv_obj_cnt'] += 1
         head += 1
 
-    with open(MAL_OUT_BASE + os.sep + file_name + os.extsep + 'pickle', 'wb') as f:
+    with open(BEN_OUT_BASE + os.sep + file_name + os.extsep + 'pickle', 'wb') as f:
         pickle.dump(ret, f)
 
 
 if __name__ == '__main__':
     file_list = []
-    for path, _, files in os.walk(MAL_PATH):
+    for path, _, files in os.walk(BEN_PATH):
         for file in files:
             if os.extsep in file:
                 name, ext = file.rsplit(os.extsep, maxsplit=1)
@@ -96,5 +96,6 @@ if __name__ == '__main__':
                 file_list.append(path + os.sep + file)
 
     with mp.Pool(processes=os.cpu_count() // 2) as pool:
-        for _ in tqdm(pool.imap_unordered(parse_pdf, file_list), total=len(file_list)):
+        for _ in tqdm(pool.imap_unordered(parse_pdf, file_list, chunksize=1024), total=len(file_list)):
             pass
+
