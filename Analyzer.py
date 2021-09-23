@@ -2,11 +2,13 @@ import base64
 import binascii
 import os
 import pickle
+import sys
 import zlib
 
 import chardet
 import networkx as nx
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 from Utils import get_entropy, get_file_name_ext
 
@@ -39,7 +41,7 @@ def check(file_path):
     'trailer': tuple
     """
     with open(file_path, 'rb') as f:
-        file_hash = file_path.split(os.sep)[-1].rsplit(os.extsep, maxsplit=1)[0]
+        file_hash, _ = get_file_name_ext(file_path)
         parse_dict = pickle.load(f)
     ret = {
         'malicious': [],
@@ -67,13 +69,13 @@ def check(file_path):
                     entropy = get_entropy(stream)
                     if entropy >= 7.99:
                         ret['malicious'].append(f"High stream entropy at obj {obj_num}")
-                    enc_type = chardet.detect(stream)
-                    if enc_type['confidence'] > 0.7:
-                        try:
-                            decoded = stream.decode(enc_type['encoding'])
-                            ret['decoded'][obj_num] = (enc_type['encoding'], decoded)
-                        except Exception as e:
-                            pass
+                    # enc_type = chardet.detect(stream)
+                    # if enc_type['confidence'] > 0.7:
+                    #     try:
+                    #         decoded = stream.decode(enc_type['encoding'])
+                    #         ret['decoded'][obj_num] = (enc_type['encoding'], decoded)
+                    #     except Exception as e:
+                    #         pass
                     if '/ASCIIHexDecode'.lower() in map(str.lower, cur_obj['tags']):
                         try:
                             decoded = binascii.unhexlify(
@@ -99,7 +101,14 @@ def check(file_path):
                             ret['decoded'][obj_num] = ('RunLengthDecode', decoded)
                         except Exception as e:
                             pass
-    return ret
+        if obj_num in ret['decoded']:
+            if 'eval' in ret['decoded'][obj_num]:
+                ret['malicious'].append(f"Eval method exists in Javascript at {obj_num}")
+            if 'String.fromcharcode' in ret['decoded'][obj_num]:
+                ret['malicious'].append(f"fromcharcode method exists in Javascript at {obj_num}")
+            if all(i in ret['decoded'][obj_num] for i in 'spray heap app.viewerVersion getPageNthWord'.split(" ")):
+                ret['malicious'].append(f"BufferOverflow method exists in Javascript at {obj_num}")
+    return ret, file_hash
 
 
 def build_network(file_path, save_path):
@@ -140,15 +149,32 @@ def build_network(file_path, save_path):
     return ref_network
 
 
-def main():
-    file_paths = []
-    for path, _, files, in os.walk(PARSE_PATH):
-        for file in files:
-            file_paths.append(path + os.sep + file)
-
-    for i in file_paths[300:302]:
-        ret = check(i)
+def main(args):
+    file_path = []
+    file_foo = None
+    out_dir = "./"
+    graph = False
+    if len(args) == 4:
+        _, file_foo, out_dir, graph, = args
+    elif len(args) == 3:
+        _, file_foo, out_dir = args
+    else:
+        print("Usage:\npython Analyzer.py [parsed file path or directory] [output path] [graph=False]")
+        file_foo = r"E:\Source\pdf\ben_parse"
+        out_dir = "./"
+    if os.path.isfile(file_foo):
+        file_path.append(file_foo)
+    else:
+        for path, _, files in os.walk(file_foo):
+            for file in files:
+                file_path.append(path + os.sep + file)
+    for file in tqdm(file_path):
+        result, name = check(file)
+        with open(out_dir + os.sep + name + os.extsep + 'pickle', 'wb') as f:
+            pickle.dump(result, f)
+        if graph:
+            build_network(file, out_dir)
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
